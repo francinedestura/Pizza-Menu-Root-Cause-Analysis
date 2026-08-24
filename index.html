@@ -1,0 +1,395 @@
+<title>Pizza Menu Root Cause Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --paper:#faf9f6; --surface:#ffffff; --ink:#1a1917; --ink-2:#55534d; --muted:#8a877e;
+    --hairline:#e6e4dc; --hairline-2:#efede6; --link:#1c5cab;
+    --c-bau:#2a78d6; --c-exec:#eb6834; --c-data:#1baf7a; --c-invalid:#4a3aa7; --c-product:#e87ba4; --c-nt:#8a877e; --c-nofield:#c3c2b7;
+    --good:#0ca30c; --pillbg:#f1efe9; --rowhover:#f6f5f0;
+    --shadow:0 1px 2px rgba(26,25,23,.05),0 4px 14px rgba(26,25,23,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#121211; --surface:#1c1c1a; --ink:#f2f1ec; --ink-2:#b8b6ac; --muted:#8a877e;
+      --hairline:#2e2d2a; --hairline-2:#262523; --link:#86b6ef;
+      --c-bau:#3987e5; --c-exec:#d95926; --c-data:#199e70; --c-invalid:#9085e9; --c-product:#d55181; --c-nt:#8a877e; --c-nofield:#4c4b46;
+      --good:#0ca30c; --pillbg:#26251f; --rowhover:#232320; --shadow:none;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#121211; --surface:#1c1c1a; --ink:#f2f1ec; --ink-2:#b8b6ac; --muted:#8a877e;
+    --hairline:#2e2d2a; --hairline-2:#262523; --link:#86b6ef;
+    --c-bau:#3987e5; --c-exec:#d95926; --c-data:#199e70; --c-invalid:#9085e9; --c-product:#d55181; --c-nt:#8a877e; --c-nofield:#4c4b46;
+    --good:#0ca30c; --pillbg:#26251f; --rowhover:#232320; --shadow:none;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--paper); color:var(--ink); font:15px/1.5 "Archivo",system-ui,-apple-system,"Segoe UI",sans-serif; margin:0; padding:28px 20px 60px;}
+  .wrap{max-width:1060px; margin:0 auto; display:flex; flex-direction:column; gap:18px;}
+  a{color:var(--link); text-decoration:none} a:hover{text-decoration:underline}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums;}
+  header{display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; justify-content:space-between;}
+  h1{font-size:26px; font-weight:700; letter-spacing:-.02em; margin:0; text-wrap:balance;}
+  .sub{color:var(--ink-2); font-size:13.5px; margin-top:4px; max-width:66ch;}
+  .pill{display:inline-flex; align-items:center; gap:7px; background:var(--pillbg); border:1px solid var(--hairline); border-radius:999px; padding:5px 12px; font-size:12.5px; color:var(--ink-2); white-space:nowrap;}
+  .dot{width:8px; height:8px; border-radius:50%; flex:none; display:inline-block;}
+  .controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  label.ctl{font-size:12px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--muted);}
+  select{font:inherit; font-size:13.5px; color:var(--ink); background:var(--surface); border:1px solid var(--hairline); border-radius:8px; padding:7px 10px; cursor:pointer;}
+  select:focus-visible{outline:2px solid var(--link); outline-offset:2px}
+
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px;}
+  .card{background:var(--surface); border:1px solid var(--hairline); border-radius:12px; padding:13px 15px; box-shadow:var(--shadow);}
+  .card .lab{display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2);}
+  .card .val{font-size:28px; font-weight:600; letter-spacing:-.01em; margin-top:6px;}
+  .card .note{font-size:12px; color:var(--muted); margin-top:2px;}
+
+  .panel{background:var(--surface); border:1px solid var(--hairline); border-radius:12px; padding:18px 20px; box-shadow:var(--shadow);}
+  .panel h2{font-size:15px; font-weight:600; margin:0 0 2px; letter-spacing:-.01em;}
+  .panel .desc{font-size:12.5px; color:var(--muted); margin:0 0 14px; max-width:84ch;}
+  .phead{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .seg{display:inline-flex; border:1px solid var(--hairline); border-radius:8px; overflow:hidden; background:var(--surface); flex:none;}
+  .seg button{background:none; border:none; padding:5px 12px; font:inherit; font-size:12.5px; font-weight:500; color:var(--ink-2); cursor:pointer;}
+  .seg button[aria-pressed="true"]{background:var(--ink); color:var(--paper);}
+  .seg button:focus-visible{outline:2px solid var(--link); outline-offset:-2px}
+
+  .donutbox{display:flex; gap:26px; align-items:center; flex-wrap:wrap;}
+  .legend{display:flex; flex-direction:column; gap:8px; min-width:260px; flex:1;}
+  .lrow{display:flex; align-items:center; gap:9px; font-size:13.5px;}
+  .lrow .name{flex:1; color:var(--ink);}
+  .lrow .name small{color:var(--muted); font-size:11.5px;}
+  .lrow .n{font-weight:600;} .lrow .pct{color:var(--muted); width:52px; text-align:right;}
+  .center-num{font-size:30px; font-weight:600; fill:var(--ink);}
+  .center-lab{font-size:11px; fill:var(--muted); letter-spacing:.05em; text-transform:uppercase;}
+
+  .tscroll{overflow-x:auto;}
+  table{border-collapse:collapse; width:100%; font-size:13px;}
+  th{font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); text-align:right; padding:7px 10px; border-bottom:1px solid var(--hairline); white-space:nowrap;}
+  th:first-child{text-align:left}
+  th .dot{vertical-align:1px; margin-right:5px;}
+  td{padding:8px 10px; border-bottom:1px solid var(--hairline-2); text-align:right; white-space:nowrap;}
+  td:first-child{text-align:left;}
+  tbody tr:hover{background:var(--rowhover)}
+  tr.total td{border-top:1px solid var(--hairline); border-bottom:none; font-weight:600;}
+  tr.hl td{background:var(--rowhover);}
+  .stack{display:flex; height:10px; border-radius:3px; overflow:hidden; background:var(--hairline-2); min-width:110px; gap:1px;}
+  .stack i{display:block; height:100%;}
+  td.dim{color:var(--muted)}
+  .tag{font-weight:600;}
+  .tag.good{color:var(--good)}
+  .delta-down{color:var(--good); font-weight:600;}
+  .delta-up{color:#d03b3b; font-weight:600;}
+  .frow{display:flex; gap:10px; font-size:13.5px; line-height:1.5; color:var(--ink-2);}
+  .frow .dot{margin-top:6px;}
+  .frow b{color:var(--ink); font-weight:600;}
+  tr.zero td{color:var(--muted);}
+
+  .chartwrap{overflow-x:auto;}
+  .axis-lab{font-size:11px; fill:var(--muted);}
+  .pt-lab{font-size:11.5px; font-weight:600;}
+  .chart-legend{display:flex; gap:8px; margin:0 0 10px; flex-wrap:wrap;}
+  .chip{display:inline-flex; align-items:center; gap:7px; font:inherit; font-size:12.5px; font-weight:500; color:var(--ink-2); background:var(--surface); border:1px solid var(--hairline); border-radius:999px; padding:5px 13px; cursor:pointer;}
+  .chip[aria-pressed="true"]{background:var(--pillbg); border-color:var(--ink-2); color:var(--ink);}
+  .chip[aria-pressed="false"]{opacity:.55;}
+  .chip[aria-pressed="false"] .dot{background:var(--muted) !important;}
+  .chip:focus-visible{outline:2px solid var(--link); outline-offset:2px}
+
+  footer{color:var(--muted); font-size:12.5px; line-height:1.6; max-width:92ch;}
+  footer b{color:var(--ink-2); font-weight:600;}
+  .empty{color:var(--muted); font-size:13px; padding:8px 0;}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Pizza Menu Root Cause Analysis</h1>
+      <div class="sub">Closed live-support-menu tickets from <a href="https://docs.google.com/spreadsheets/d/1THR4k4CA_t84lWCe5YzCngQ2cv5GBQW9Jd94I2iIP7Y/edit?gid=1391378490#gid=1391378490" target="_blank" rel="noopener">the active-cohort WIRA export</a> (tab <span class="mono">Tasks</span>) · snapshot pulled Aug 24, 2026 · status = closed · <span class="mono">sa-data-team</span> &amp; <span class="mono">sa-menu-content-editor</span> excluded</div>
+    </div>
+    <div class="controls">
+      <label class="ctl" for="weeksel">Week</label>
+      <select id="weeksel"></select>
+    </div>
+  </header>
+
+  <div class="cards" id="cards"></div>
+
+  <section class="panel">
+    <h2>Findings &amp; summary</h2>
+    <p class="desc">Computed across all weeks in scope (Jul 20 – Aug 24) — these don't change with the week filter.</p>
+    <div class="findings" id="findings" style="display:flex; flex-direction:column; gap:10px;"></div>
+  </section>
+
+  <section class="panel">
+    <div class="phead">
+      <div>
+        <h2>Error trends by week</h2>
+        <p class="desc" id="trenddesc"></p>
+      </div>
+      <div class="seg" role="group" aria-label="Trend measure">
+        <button id="mCount" aria-pressed="true">Counts</button>
+        <button id="mPct" aria-pressed="false">% of tagged</button>
+      </div>
+    </div>
+    <div class="chart-legend" id="serieschips" role="group" aria-label="Toggle chart lines"></div>
+    <div class="chartwrap"><svg id="trend" width="960" height="240" viewBox="0 0 960 240" role="img" aria-label="Root-cause error lines per created week"></svg></div>
+    <div class="tscroll" style="margin-top:12px"><table id="trendTable"></table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Root cause breakdown</h2>
+    <p class="desc" id="donutdesc"></p>
+    <div class="donutbox">
+      <svg id="donut" width="210" height="210" viewBox="0 0 210 210" role="img" aria-label="Donut chart of closed tickets by root cause"></svg>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Tickets per assignee</h2>
+    <p class="desc" id="assigneedesc"></p>
+    <div class="tscroll"><table id="assigneeTable"></table></div>
+  </section>
+
+  <footer>
+    <b>Scope.</b> Source export covers the active pizza-restaurants cohort (31 restos), project live-support-menu, tickets created since Jul 20, 2026. Filters applied everywhere on this page: Status = closed (600), minus 8 tickets created by <span class="mono">sa-data-team</span> (4) and <span class="mono">sa-menu-content-editor</span> (4) → 592 in scope. Weeks run Monday–Sunday by <b>created</b> date.
+    <br><br><b>Reading the weekly trend.</b> Recent weeks only include tickets that have already closed — Wk of Aug 17 and Aug 24 will grow as open tickets close, so a drop at the right edge is not yet proof of improvement. The "% of tagged" view is the fairer read since tagging coverage also shifts week to week. Execution error = SOP miss pre-live/go-live (menu opportunity). Data error = bad or missing client info at intake (OSM/DATA opportunity) — never combined into one "error rate." Not tagged (placeholder) and no-field tickets are always reported explicitly. This is a different population than the Jul 20 – Aug 11 baseline (657 closed) — don't compare trends across the two exports.
+  </footer>
+</div>
+
+<script>
+"use strict";
+const DATA = {"weeks":["2026-07-20","2026-07-27","2026-08-03","2026-08-10","2026-08-17","2026-08-24"],"rcKeys":["bau","exec","data","invalid","product","other","nt","nofield"],"assignees":["(Unassigned)","Manuel Opeña","Milana Aquinde"],"rows":[[0,7,0],[0,7,0],[0,7,2],[0,7,2],[0,7,0],[0,7,0],[0,0,2],[0,7,2],[0,7,0],[0,7,2],[0,6,0],[0,7,2],[0,7,0],[0,7,0],[0,7,0],[0,7,0],[0,7,0],[0,7,0],[0,7,0],[0,7,2],[0,7,0],[0,6,2],[0,6,1],[0,6,0],[0,0,0],[0,7,0],[0,0,0],[0,7,0],[0,6,0],[0,2,2],[0,6,0],[0,7,0],[0,6,0],[0,6,0],[0,6,0],[0,7,0],[0,0,2],[0,6,0],[0,6,2],[0,6,0],[0,6,0],[0,7,0],[0,6,0],[0,6,2],[0,6,0],[0,0,0],[0,6,0],[0,6,0],[0,6,0],[0,6,0],[0,2,0],[0,6,2],[0,0,2],[0,2,0],[0,0,0],[0,6,0],[0,6,0],[0,6,0],[0,6,2],[0,6,2],[0,6,0],[0,6,1],[0,6,0],[0,7,0],[0,6,0],[0,6,0],[0,6,0],[0,0,0],[0,6,0],[0,6,0],[0,2,2],[0,6,1],[0,0,0],[0,2,0],[0,6,2],[0,0,2],[0,6,0],[0,1,2],[0,6,0],[0,6,0],[0,2,2],[0,0,0],[0,0,0],[0,0,0],[0,3,1],[0,0,0],[0,6,0],[0,6,0],[0,0,0],[0,6,0],[0,1,0],[0,1,0],[0,6,0],[0,7,0],[0,6,0],[0,0,0],[0,0,0],[1,6,0],[1,0,1],[1,6,0],[1,1,1],[1,6,0],[1,0,1],[1,1,0],[1,7,1],[1,7,0],[1,0,0],[1,7,1],[1,0,0],[1,0,0],[1,7,0],[1,1,2],[1,0,0],[1,0,2],[1,0,2],[1,0,0],[1,0,0],[1,6,0],[1,1,2],[1,0,2],[1,1,0],[1,0,2],[1,6,0],[1,7,2],[1,6,0],[1,6,0],[1,0,2],[1,1,2],[1,6,2],[1,6,0],[1,6,0],[1,7,0],[1,0,0],[1,7,0],[1,0,0],[1,0,2],[1,6,0],[1,7,0],[1,0,2],[1,0,2],[1,1,0],[1,2,0],[1,2,0],[1,6,0],[1,7,0],[1,0,0],[1,6,0],[1,6,2],[1,6,0],[1,1,0],[1,2,0],[1,0,0],[1,7,0],[1,6,1],[1,6,0],[1,6,2],[1,0,1],[1,6,2],[1,6,0],[1,6,1],[1,7,2],[1,0,0],[1,6,2],[1,6,0],[1,0,1],[1,0,0],[1,6,0],[1,1,0],[1,7,0],[1,6,0],[1,0,1],[1,7,0],[1,0,1],[1,7,0],[1,7,0],[1,7,0],[1,2,2],[1,0,1],[1,0,0],[1,6,0],[1,1,1],[1,0,1],[1,6,0],[2,7,0],[2,6,2],[2,0,0],[2,0,0],[2,6,0],[2,6,0],[2,6,2],[2,0,0],[2,1,0],[2,0,0],[2,0,0],[2,0,0],[2,0,0],[2,0,0],[2,6,0],[2,0,0],[2,6,2],[2,0,0],[2,0,0],[2,0,0],[2,6,0],[2,7,0],[2,0,0],[2,0,0],[2,2,0],[2,1,2],[2,0,0],[2,0,0],[2,6,0],[2,0,0],[2,0,0],[2,0,0],[2,0,0],[2,0,0],[2,0,0],[2,7,0],[2,1,0],[2,1,0],[2,0,0],[2,7,0],[2,7,0],[2,0,0],[2,6,0],[2,0,0],[2,0,0],[2,0,1],[2,0,0],[2,0,0],[2,0,0],[2,0,0],[2,7,0],[2,7,0],[2,0,0],[2,6,0],[2,7,0],[2,0,1],[2,0,0],[2,1,0],[2,6,0],[2,6,0],[2,6,0],[2,6,2],[2,1,0],[2,0,0],[2,6,0],[2,7,0],[2,1,2],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,0,0],[2,1,0],[2,7,0],[2,0,0],[2,0,1],[2,6,0],[2,6,0],[2,2,0],[2,1,0],[2,0,0],[2,1,0],[2,0,0],[2,6,0],[2,6,0],[2,6,2],[2,1,0],[2,0,0],[2,6,0],[2,1,0],[2,0,2],[2,0,0],[2,0,1],[2,6,0],[2,6,0],[2,6,0],[2,0,0],[2,1,1],[2,6,1],[2,0,1],[2,0,0],[2,6,1],[2,6,1],[2,6,0],[2,0,0],[2,6,0],[2,6,0],[2,1,0],[2,0,1],[2,7,0],[2,1,0],[2,0,0],[2,7,2],[2,0,0],[2,6,0],[2,6,2],[2,6,0],[2,0,0],[2,2,0],[2,1,0],[2,1,1],[2,0,2],[2,0,0],[2,0,0],[2,1,0],[2,6,0],[2,1,0],[2,6,0],[2,1,0],[2,0,2],[2,7,0],[2,6,0],[2,6,0],[2,6,0],[2,7,0],[2,6,0],[2,6,0],[2,7,0],[2,0,2],[2,6,0],[2,6,0],[2,6,0],[2,1,0],[2,6,0],[2,1,0],[2,0,0],[2,0,0],[2,0,0],[2,0,1],[2,6,0],[2,0,0],[2,7,0],[2,6,2],[2,7,0],[2,2,2],[2,1,0],[2,1,0],[2,0,0],[2,0,0],[2,1,0],[2,1,0],[2,1,2],[2,1,0],[2,1,0],[2,1,0],[2,1,0],[2,0,0],[2,0,1],[2,6,0],[2,1,0],[2,2,2],[2,6,0],[2,1,0],[2,7,0],[2,0,0],[2,0,0],[2,0,0],[2,7,1],[2,7,1],[2,1,0],[2,0,0],[2,6,0],[2,0,2],[2,6,0],[2,6,0],[2,7,1],[2,7,2],[2,6,0],[2,0,1],[2,1,0],[2,6,0],[2,6,0],[2,0,1],[2,0,1],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,6,0],[2,0,0],[2,6,0],[2,0,1],[2,7,0],[2,0,0],[2,0,1],[2,0,0],[2,1,1],[2,0,0],[3,6,0],[3,0,1],[3,1,2],[3,0,1],[3,7,0],[3,6,0],[3,2,0],[3,6,0],[3,0,1],[3,0,1],[3,6,0],[3,7,2],[3,6,0],[3,1,0],[3,6,0],[3,0,1],[3,0,0],[3,1,0],[3,1,1],[3,7,0],[3,6,0],[3,1,0],[3,0,1],[3,0,2],[3,1,2],[3,0,1],[3,0,1],[3,0,1],[3,0,2],[3,6,0],[3,6,0],[3,0,0],[3,0,0],[3,0,0],[3,0,0],[3,6,2],[3,1,0],[3,1,0],[3,0,0],[3,1,0],[3,6,0],[3,6,0],[3,6,0],[3,6,0],[3,7,0],[3,7,0],[3,7,2],[3,6,0],[3,0,0],[3,7,0],[3,6,0],[3,0,0],[3,1,0],[3,2,0],[3,6,0],[3,0,0],[3,0,1],[3,0,2],[3,1,0],[3,0,0],[3,0,0],[3,6,0],[3,0,0],[3,0,0],[3,1,2],[3,0,0],[3,1,0],[3,6,0],[3,6,0],[3,6,0],[3,1,0],[3,1,0],[3,0,0],[3,2,0],[3,0,1],[3,0,0],[3,7,0],[3,0,0],[3,1,1],[3,7,1],[3,6,0],[3,1,0],[3,0,1],[3,6,0],[3,6,2],[3,0,0],[3,6,0],[3,6,0],[3,0,0],[3,0,0],[3,0,0],[3,0,0],[3,6,0],[3,6,0],[3,6,0],[3,6,0],[3,6,0],[3,6,0],[3,6,0],[3,0,0],[3,0,0],[3,6,0],[3,0,0],[3,0,0],[3,0,0],[3,0,1],[3,6,0],[3,0,0],[3,0,0],[3,0,1],[3,6,0],[3,6,0],[3,6,0],[3,6,0],[3,6,0],[3,6,2],[3,1,0],[3,0,0],[3,2,0],[3,1,0],[3,6,0],[3,2,0],[3,1,1],[3,7,0],[3,0,0],[3,6,0],[3,0,2],[3,0,1],[3,0,1],[3,0,1],[3,1,0],[3,7,0],[3,7,1],[3,0,0],[3,0,1],[3,6,0],[3,6,0],[3,6,0],[4,0,0],[4,0,0],[4,1,2],[4,2,0],[4,0,0],[4,7,0],[4,6,2],[4,0,2],[4,0,2],[4,0,2],[4,6,0],[4,0,2],[4,1,0],[4,0,2],[4,0,0],[4,0,2],[4,2,0],[4,0,0],[4,2,0],[4,0,0],[4,0,2],[4,0,2],[4,0,0],[4,0,2],[4,1,0],[4,0,2],[4,2,2],[4,6,0],[4,1,0],[4,0,0],[4,1,0],[4,7,0],[4,1,0],[4,7,0],[4,7,0],[4,0,2],[4,0,0],[4,0,0],[4,7,0],[4,0,2],[4,0,2],[4,0,2],[4,0,0],[4,6,0],[4,0,0],[4,0,2],[4,1,2],[4,6,0],[4,6,0],[4,0,0],[4,0,0],[4,6,0],[4,0,0],[4,0,0],[4,0,0],[5,1,0]],"allAssignees":["(Unassigned)","Manuel Opeña","Milana Aquinde","Joel Tan","keneisha.pinto@wondersco.com"]};
+const CATS = [
+  {k:"bau",     name:"Business as usual",     color:"var(--c-bau)"},
+  {k:"exec",    name:"Execution error",       color:"var(--c-exec)", sub:"menu opportunity"},
+  {k:"data",    name:"Data error",            color:"var(--c-data)", sub:"data opportunity"},
+  {k:"invalid", name:"Invalid menu request",  color:"var(--c-invalid)"},
+  {k:"product", name:"Product limitation",    color:"var(--c-product)"},
+  {k:"other",   name:"Other",                 color:"var(--c-product)"},
+  {k:"nt",      name:"Not tagged",            color:"var(--c-nt)", sub:"select-root-cause left"},
+  {k:"nofield", name:"No root-cause field",   color:"var(--c-nofield)", sub:"shape lacks the dropdown"},
+];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=n=>n.toLocaleString("en-US");
+const pct=(n,d)=>d?Math.round(100*n/d)+"%":"–";
+const RCI=Object.fromEntries(DATA.rcKeys.map((k,i)=>[k,i]));
+
+function wkRange(key){
+  const d=new Date(key+"T00:00:00Z"), e=new Date(d); e.setUTCDate(d.getUTCDate()+6);
+  const f=x=>x.toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"});
+  return f(d)+" – "+f(e);
+}
+function wkShort(key){ return new Date(key+"T00:00:00Z").toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"UTC"}); }
+
+const state={week:-1, measure:"count"};  // -1 = all weeks
+
+/* per-week aggregates (computed once) */
+const weekly=DATA.weeks.map((w,wi)=>{
+  const sub=DATA.rows.filter(t=>t[0]===wi);
+  const by=Object.fromEntries(DATA.rcKeys.map(k=>[k,0]));
+  sub.forEach(t=>by[DATA.rcKeys[t[1]]]++);
+  const tagged=sub.length-by.nt-by.nofield;
+  return {key:w, total:sub.length, by, tagged};
+});
+const LASTFULL=DATA.weeks.length-1; // index of last (partial) week = weeks.length-1 when pulled mid-week
+
+function filterRows(){ return state.week<0 ? DATA.rows : DATA.rows.filter(t=>t[0]===state.week); }
+function aggregate(rows){
+  const by=Object.fromEntries(DATA.rcKeys.map(k=>[k,0]));
+  const ass=new Map();
+  for(const t of rows){
+    const k=DATA.rcKeys[t[1]]; by[k]++;
+    const a=DATA.assignees[t[2]];
+    if(!ass.has(a)) ass.set(a, Object.assign({assignee:a,total:0}, Object.fromEntries(DATA.rcKeys.map(x=>[x,0]))));
+    const o=ass.get(a); o.total++; o[k]++;
+  }
+  const table=[...ass.values()].sort((x,y)=>y.total-x.total);
+  for(const o of table){
+    const hasField=o.total-o.nofield;
+    o.taggedPct = hasField ? Math.round(100*(hasField-o.nt)/hasField) : null;
+  }
+  return {total:rows.length, by, assignees:table};
+}
+
+/* ---------- cards ---------- */
+function renderCards(a){
+  const tagged=a.total-a.by.nt-a.by.nofield;
+  const scopeLabel = state.week<0 ? "of scope" : "of week";
+  const cards=[
+    {lab:"Closed in scope", val:a.total, note: state.week<0 ? "Jul 20 – Aug 24 · all weeks" : "created wk of "+wkShort(DATA.weeks[state.week]), color:null},
+    {lab:"Business as usual", val:a.by.bau, note:pct(a.by.bau,a.total)+" "+scopeLabel, color:"var(--c-bau)"},
+    {lab:"Execution error", val:a.by.exec, note:pct(a.by.exec,tagged)+" of tagged · menu opp.", color:"var(--c-exec)"},
+    {lab:"Data error", val:a.by.data, note:pct(a.by.data,tagged)+" of tagged · data opp.", color:"var(--c-data)"},
+    {lab:"Not tagged", val:a.by.nt, note:pct(a.by.nt,a.total)+" "+scopeLabel+" · backfill target", color:"var(--c-nt)"},
+    {lab:"No RC field", val:a.by.nofield, note:pct(a.by.nofield,a.total)+" "+scopeLabel+" · form gap", color:"var(--c-nofield)"},
+  ];
+  $("cards").innerHTML=cards.map(c=>
+    '<div class="card"><div class="lab">'+(c.color?'<span class="dot" style="background:'+c.color+'"></span>':"")+c.lab+'</div>'+
+    '<div class="val mono">'+fmt(c.val)+'</div><div class="note">'+c.note+'</div></div>').join("");
+}
+
+/* ---------- donut ---------- */
+function donutPath(cx,cy,r1,r2,a0,a1){
+  const p=(r,a)=>[cx+r*Math.cos(a),cy+r*Math.sin(a)];
+  const large=(a1-a0)>Math.PI?1:0;
+  const [x0,y0]=p(r2,a0),[x1,y1]=p(r2,a1),[x2,y2]=p(r1,a1),[x3,y3]=p(r1,a0);
+  return "M"+x0+" "+y0+" A"+r2+" "+r2+" 0 "+large+" 1 "+x1+" "+y1+" L"+x2+" "+y2+" A"+r1+" "+r1+" 0 "+large+" 0 "+x3+" "+y3+" Z";
+}
+function renderDonut(a){
+  const items=CATS.map(c=>({...c,n:a.by[c.k]||0})).filter(c=>c.n>0);
+  const total=a.total||1;
+  let ang=-Math.PI/2, svg="";
+  for(const it of items){
+    const sweep=2*Math.PI*it.n/total, end=ang+Math.max(sweep-0.0001,0.0001);
+    svg+='<path d="'+donutPath(105,105,62,95,ang,end)+'" fill="'+it.color+'" stroke="var(--surface)" stroke-width="2"><title>'+esc(it.name)+": "+fmt(it.n)+" ("+pct(it.n,total)+")</title></path>";
+    ang+=sweep;
+  }
+  svg+='<text x="105" y="101" text-anchor="middle" class="center-num mono">'+fmt(a.total)+'</text>'+
+       '<text x="105" y="121" text-anchor="middle" class="center-lab">closed</text>';
+  $("donut").innerHTML=svg;
+  $("legend").innerHTML=items.length?items.map(it=>
+    '<div class="lrow"><span class="dot" style="background:'+it.color+'"></span><span class="name">'+esc(it.name)+(it.sub?' <small>· '+esc(it.sub)+"</small>":"")+'</span>'+
+    '<span class="n mono">'+fmt(it.n)+'</span><span class="pct mono">'+pct(it.n,total)+"</span></div>").join("")
+    : '<div class="empty">No closed tickets this week.</div>';
+  $("donutdesc").textContent=(state.week<0
+    ? "All "+fmt(a.total)+" closed tickets in scope."
+    : fmt(a.total)+" closed tickets created wk of "+wkShort(DATA.weeks[state.week])+" ("+wkRange(DATA.weeks[state.week])+").")
+    +' "No root-cause field" = the ticket’s shape has no dropdown at all — a form gap, not an agent miss.';
+}
+
+/* ---------- assignee table ---------- */
+function renderAssignees(a){
+  /* include every assignee that appears anywhere in the export, even with zero closed tickets in scope */
+  for(const name of (DATA.allAssignees||[])){
+    if(!a.assignees.some(x=>x.assignee===name)){
+      a.assignees.push(Object.assign({assignee:name,total:0,taggedPct:null}, Object.fromEntries(DATA.rcKeys.map(x=>[x,0]))));
+    }
+  }
+  const activeCats=CATS.filter(c=>a.assignees.some(x=>x[c.k]>0));
+  const unass=a.assignees.find(x=>x.assignee==="(Unassigned)");
+  $("assigneedesc").textContent="Every assignee in the export, split by root cause"+(state.week<0?"":" for the selected week")+" — zero rows mean their tickets are outside this scope (not closed"+(state.week<0?"":", or another week")+"). Tagged % = share with a real root cause filled, out of tickets whose shape has the dropdown (Tim's compliance metric)."+(unass&&unass.total?" "+fmt(unass.total)+" of "+fmt(a.total)+" tickets are unassigned in WIRA.":"");
+  if(!a.assignees.length){ $("assigneeTable").innerHTML='<tbody><tr><td class="empty">No closed tickets this week.</td></tr></tbody>'; return; }
+  let html="<thead><tr><th>Assignee</th><th>Mix</th>"+
+    activeCats.map(c=>'<th><span class="dot" style="background:'+c.color+'"></span>'+esc(c.name.replace("Business as usual","BAU").replace("Execution error","Exec").replace("Data error","Data").replace("No root-cause field","No field").replace("Invalid menu request","Invalid"))+"</th>").join("")+
+    "<th>Total</th><th>Tagged %</th></tr></thead><tbody>";
+  for(const o of a.assignees){
+    const stack=activeCats.map(c=>o[c.k]?'<i style="width:'+(100*o[c.k]/o.total)+'%; background:'+c.color+'"></i>':"").join("");
+    html+='<tr class="'+(o.total?"":"zero")+'"><td>'+esc(o.assignee)+'</td><td><span class="stack">'+stack+"</span></td>"+
+      activeCats.map(c=>'<td class="mono'+(o[c.k]?"":" dim")+'">'+(o[c.k]||"·")+"</td>").join("")+
+      '<td class="mono"><b>'+fmt(o.total)+'</b></td><td class="mono tag'+(o.taggedPct>=80?" good":"")+'">'+(o.taggedPct==null?"–":o.taggedPct+"%")+"</td></tr>";
+  }
+  const tagged=a.total-a.by.nt-a.by.nofield, hasField=a.total-a.by.nofield;
+  html+='<tr class="total"><td>Total</td><td></td>'+activeCats.map(c=>'<td class="mono">'+fmt(a.by[c.k])+"</td>").join("")+
+    '<td class="mono">'+fmt(a.total)+'</td><td class="mono">'+(hasField?Math.round(100*tagged/hasField)+"%":"–")+"</td></tr></tbody>";
+  $("assigneeTable").innerHTML=html;
+}
+
+/* ---------- findings (always all-weeks) ---------- */
+function renderFindings(){
+  const a=aggregate(DATA.rows);
+  const tagged=a.total-a.by.nt-a.by.nofield;
+  const full=weekly.slice(0,-1); /* drop the partial current week */
+  const peak=full.reduce((m,w)=>w.by.exec>m.by.exec?w:m, full[0]);
+  const last=full[full.length-1];
+  const dataMin=Math.min(...full.map(w=>w.by.data)), dataMax=Math.max(...full.map(w=>w.by.data));
+  const worstWk=full.reduce((m,w)=>(w.total&&(m===null||w.tagged/w.total<m.tagged/m.total))?w:m, null);
+  const named=a.assignees.filter(x=>x.assignee!=="(Unassigned)"&&x.total>0);
+  const unass=a.assignees.find(x=>x.assignee==="(Unassigned)");
+  const f=[
+    {c:"var(--c-bau)", t:"<b>Summary:</b> "+fmt(a.total)+" closed tickets in scope; "+fmt(tagged)+" ("+pct(tagged,a.total)+") carry a real root cause. Of those tagged: BAU "+pct(a.by.bau,tagged)+", <b>execution error "+pct(a.by.exec,tagged)+" ("+fmt(a.by.exec)+")</b>, data error "+pct(a.by.data,tagged)+" ("+fmt(a.by.data)+"). Execution outweighs data ~"+(Math.round(10*a.by.exec/Math.max(a.by.data,1))/10).toFixed(1).replace(/\.0$/,"")+":1 — the bigger opportunity is our own build quality, not intake data."},
+    {c:"var(--c-exec)", t:"<b>Execution errors peaked wk of "+wkShort(peak.key)+"</b> ("+fmt(peak.by.exec)+", "+pct(peak.by.exec,peak.tagged)+" of tagged) and have fallen since — "+full.map(w=>w.by.exec).join(" → ")+" by week ("+full.map(w=>pct(w.by.exec,w.tagged)).join(" → ")+" of tagged). Directionally improving, but recent weeks are provisional: their open tickets haven't closed yet."},
+    {c:"var(--c-data)", t:"<b>Data errors are low and flat</b> — "+dataMin+"–"+dataMax+" per week ("+full.map(w=>w.by.data).join(" → ")+"), no clear trend either way. Intake verification is holding; keep watching rather than acting."},
+    {c:"var(--c-nt)", t:"<b>Tagging is the biggest blind spot:</b> "+fmt(a.by.nt)+" tickets ("+pct(a.by.nt,a.total)+") still sit on the select-root-cause placeholder and another "+fmt(a.by.nofield)+" ("+pct(a.by.nofield,a.total)+") have no root-cause field at all — only "+pct(tagged,a.total)+" of closed tickets are readable. Worst coverage: wk of "+wkShort(worstWk.key)+" ("+fmt(worstWk.tagged)+" of "+fmt(worstWk.total)+" tagged), so early-week “low” error counts partly reflect missing tags, not fewer errors. Backfill first, then trust the trend."},
+    {c:"var(--c-nofield)", t:"<b>The no-field gap is a form problem:</b> shapes like agent notes, resto info, coupon and printer-mask tickets have no root-cause dropdown — the planned Pizza-specific WIRA category and new dropdown values would close most of it."},
+    {c:"var(--c-invalid)", t:"<b>Assignment is too sparse for accountability:</b> "+(unass?fmt(unass.total):0)+" of "+fmt(a.total)+" closed tickets ("+(unass?pct(unass.total,a.total):"0%")+") have no assignee. Where it is set, compliance looks good — "+named.map(x=>esc(x.assignee)+" "+(x.taggedPct==null?"–":x.taggedPct+"%")).join(", ")+" tagged. Populating assignee in WIRA (or the export) is the unlock for per-person Mistake Rate."},
+  ];
+  $("findings").innerHTML=f.map(x=>'<div class="frow"><span class="dot" style="background:'+x.c+'"></span><div>'+x.t+"</div></div>").join("");
+}
+
+/* ---------- weekly trend ---------- */
+const SERIES=[
+  {k:"exec",    name:"Execution error",      c:"var(--c-exec)"},
+  {k:"data",    name:"Data error",           c:"var(--c-data)"},
+  {k:"invalid", name:"Invalid menu request", c:"var(--c-invalid)"},
+  {k:"product", name:"Product limitation",   c:"var(--c-product)"},
+];
+const seriesOn={exec:true, data:true, invalid:true, product:true};
+function renderChips(){
+  $("serieschips").innerHTML=SERIES.map(s=>
+    '<button class="chip" data-k="'+s.k+'" aria-pressed="'+seriesOn[s.k]+'"><span class="dot" style="background:'+s.c+'"></span>'+esc(s.name)+"</button>").join("");
+  [...$("serieschips").querySelectorAll(".chip")].forEach(b=>{
+    b.onclick=()=>{ const k=b.dataset.k; seriesOn[k]=!seriesOn[k]; b.setAttribute("aria-pressed",seriesOn[k]); renderTrend(); };
+  });
+}
+function renderTrend(){
+  const W=960,H=240,L=40,R=20,T=20,B=34;
+  const usePct=state.measure==="pct";
+  const val=(w,k)=> usePct ? (w.tagged?100*w.by[k]/w.tagged:0) : w.by[k];
+  const visible=SERIES.filter(s=>seriesOn[s.k]);
+  const maxv=Math.max(4,...weekly.flatMap(w=>visible.map(s=>val(w,s.k))));
+  const xs=i=>L+ (weekly.length>1 ? i*(W-L-R)/(weekly.length-1) : (W-L-R)/2);
+  const ys=v=>T+(H-T-B)*(1-v/maxv);
+  let svg="";
+  const gridN=4;
+  for(let i=0;i<=gridN;i++){
+    const v=maxv*i/gridN, y=ys(v);
+    svg+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-R)+'" y2="'+y+'" stroke="var(--hairline-2)" stroke-width="1"/>'+
+         '<text x="'+(L-6)+'" y="'+(y+3)+'" text-anchor="end" class="axis-lab mono">'+(usePct?Math.round(v)+"%":Math.round(v))+"</text>";
+  }
+  weekly.forEach((w,i)=>{
+    const partial=i===weekly.length-1;
+    svg+='<text x="'+xs(i)+'" y="'+(H-10)+'" text-anchor="middle" class="axis-lab">'+wkShort(w.key)+(partial?"*":"")+"</text>";
+    if(state.week===i) svg+='<line x1="'+xs(i)+'" y1="'+T+'" x2="'+xs(i)+'" y2="'+(H-B)+'" stroke="var(--hairline)" stroke-width="8" opacity="0.5"/>';
+  });
+  if(!visible.length){
+    svg+='<text x="'+(W/2)+'" y="'+(H/2)+'" text-anchor="middle" class="axis-lab">All lines hidden — turn one on above.</text>';
+  }
+  for(const s of visible){
+    const pts=weekly.map((w,i)=>[xs(i),ys(val(w,s.k))]);
+    svg+='<polyline points="'+pts.map(p=>p.join(",")).join(" ")+'" fill="none" stroke="'+s.c+'" stroke-width="2" stroke-linejoin="round"/>';
+    pts.forEach((p,i)=>{
+      const v=val(weekly[i],s.k);
+      svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(i===weekly.length-1?4.5:3.5)+'" fill="'+s.c+'" stroke="var(--surface)" stroke-width="2"><title>Wk of '+wkShort(weekly[i].key)+" — "+esc(s.name)+": "+(usePct?v.toFixed(0)+"% of tagged":Math.round(v))+"</title></circle>";
+      /* label every point on the first two series; on the rest, skip zeros to avoid a pile-up on the baseline */
+      if(v>0 || (s.k==="exec"||s.k==="data"))
+        svg+='<text x="'+p[0]+'" y="'+(p[1]-9)+'" text-anchor="middle" class="pt-lab mono" fill="'+s.c+'">'+(usePct?Math.round(v)+"%":Math.round(v))+"</text>";
+    });
+  }
+  $("trend").innerHTML=svg;
+  $("trenddesc").textContent="Closed tickets by created week (Mon–Sun). * Wk of "+wkShort(weekly[weekly.length-1].key)+" is still filling in — open tickets from recent weeks aren't counted yet, so treat the right edge as provisional.";
+  /* table under the chart */
+  let html="<thead><tr><th>Week</th>"+weekly.map((w,i)=>'<th class="mono">'+wkShort(w.key)+(i===weekly.length-1?"*":"")+"</th>").join("")+"</tr></thead><tbody>";
+  const rowsDef=[
+    {lab:'<span class="dot" style="background:var(--c-exec)"></span> Execution error', f:w=>fmt(w.by.exec)},
+    {lab:'<span class="dot" style="background:var(--c-data)"></span> Data error', f:w=>fmt(w.by.data)},
+    {lab:'<span class="dot" style="background:var(--c-invalid)"></span> Invalid menu request', f:w=>fmt(w.by.invalid)},
+    {lab:'<span class="dot" style="background:var(--c-product)"></span> Product limitation', f:w=>fmt(w.by.product)},
+    {lab:"Exec % of tagged", f:w=>w.tagged?Math.round(100*w.by.exec/w.tagged)+"%":"–"},
+    {lab:"Data % of tagged", f:w=>w.tagged?Math.round(100*w.by.data/w.tagged)+"%":"–"},
+    {lab:"Tagged / closed", f:w=>fmt(w.tagged)+" / "+fmt(w.total)},
+  ];
+  for(const rd of rowsDef){
+    html+="<tr><td>"+rd.lab+"</td>"+weekly.map(w=>'<td class="mono">'+rd.f(w)+"</td>").join("")+"</tr>";
+  }
+  $("trendTable").innerHTML=html+"</tbody>";
+}
+
+/* ---------- controls ---------- */
+const sel=$("weeksel");
+sel.innerHTML='<option value="-1">All weeks (Jul 20 – Aug 24)</option>'+
+  DATA.weeks.map((w,i)=>'<option value="'+i+'">Wk of '+wkShort(w)+" ("+wkRange(w)+")"+(i===DATA.weeks.length-1?" · partial":"")+"</option>").join("");
+sel.value="0";
+sel.onchange=()=>{ state.week=parseInt(sel.value,10); renderAll(); };
+$("mCount").onclick=()=>{ state.measure="count"; $("mCount").setAttribute("aria-pressed",true); $("mPct").setAttribute("aria-pressed",false); renderTrend(); };
+$("mPct").onclick=()=>{ state.measure="pct"; $("mCount").setAttribute("aria-pressed",false); $("mPct").setAttribute("aria-pressed",true); renderTrend(); };
+
+function renderAll(){
+  const a=aggregate(filterRows());
+  renderCards(a); renderDonut(a); renderAssignees(a); renderTrend();
+}
+state.week=0;   /* start on Wk of Jul 20 per Francine's ask */
+renderFindings();
+renderChips();
+renderAll();
+</script>
